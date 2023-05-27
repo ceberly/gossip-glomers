@@ -1,2 +1,2 @@
-echo:
-	~/local/bin/maelstrom/maelstrom test -w echo --bin ~/go/bin/maelstrom-echo --node-count 1 --time-limit 10
+default:
+	${MAELSTROM_BIN} test -w echo --bin ${OUR_GO_PATH}/bin/maelstrom-echo --node-count 1 --time-limit 10
