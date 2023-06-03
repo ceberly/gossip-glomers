@@ -6,3 +6,6 @@ echo:
 
 unique-ids:
 	cd maelstrom-unique-ids && make
+
+broadcast:
+	cd maelstrom-broadcast && make
