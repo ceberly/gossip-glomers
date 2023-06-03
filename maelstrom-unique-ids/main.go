@@ -19,11 +19,13 @@ func main() {
 			return err
 		}
 
-		body["type"] = "generate_ok"
-		body["id"] = fmt.Sprintf("%s:%d", n.ID(), counter)
+		resp := make(map[string]any)
+
+		resp["type"] = "generate_ok"
+		resp["id"] = fmt.Sprintf("%s:%d", n.ID(), counter)
 		counter += 1
 
-		return n.Reply(msg, body)
+		return n.Reply(msg, resp)
 	})
 
 	if err := n.Run(); err != nil {
