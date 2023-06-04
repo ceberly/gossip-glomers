@@ -3,23 +3,53 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"sync"
 
 	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
 )
 
+// keep a set of seen values for uniqueness.
+// keep the keys which are what we are interested in a separate slice
+// so that the list doesn't have to be created on every read() message.
+type Seen struct {
+	sync.Mutex
+	seenSet map[float64]bool
+	seen    []float64
+}
+
 func main() {
 	n := maelstrom.NewNode()
 
-	seen := make([]float64, 0)
+	var neighbors []interface{}
+
+	var seen Seen
+	seen.seenSet = make(map[float64]bool)
+	seen.seen = make([]float64, 0, 10000)
 
 	n.Handle("broadcast", func(msg maelstrom.Message) error {
+		if neighbors == nil {
+			log.Fatal("no neighbors set")
+		}
+
 		var body map[string]any
 		if err := json.Unmarshal(msg.Body, &body); err != nil {
 			return err
 		}
 
 		message := body["message"].(float64)
-		seen = append(seen, message)
+
+		seen.Lock()
+		if _, ok := seen.seenSet[message]; !ok {
+			seen.seenSet[message] = true
+			seen.seen = append(seen.seen, message)
+			seen.Unlock()
+
+			for _, neighbor := range neighbors {
+				n.Send(neighbor.(string), msg.Body)
+			}
+		} else {
+			seen.Unlock()
+		}
 
 		resp := make(map[string]any)
 
@@ -37,7 +67,10 @@ func main() {
 		resp := make(map[string]any)
 
 		resp["type"] = "read_ok"
-		resp["messages"] = seen
+
+		seen.Lock()
+		resp["messages"] = seen.seen
+		seen.Unlock()
 
 		return n.Reply(msg, resp)
 	})
@@ -47,6 +80,9 @@ func main() {
 		if err := json.Unmarshal(msg.Body, &body); err != nil {
 			return err
 		}
+
+		topology := body["topology"].(map[string]interface{})
+		neighbors = topology[n.ID()].([]interface{})
 
 		resp := make(map[string]any)
 
