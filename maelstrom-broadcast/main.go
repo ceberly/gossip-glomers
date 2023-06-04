@@ -11,20 +11,30 @@ import (
 // keep a set of seen values for uniqueness.
 // keep the keys which are what we are interested in a separate slice
 // so that the list doesn't have to be created on every read() message.
+// This is a pretty inefficient way to store this, I think, but I'm
+// trying to focus on the distributed systems part of these challenges :)
 type Seen struct {
 	sync.Mutex
 	seenSet map[float64]bool
 	seen    []float64
 }
 
-func main() {
-	n := maelstrom.NewNode()
+type DownNeighbors struct {
+	sync.Mutex
+	down []string
+}
 
+func main() {
 	var neighbors []interface{}
 
 	var seen Seen
 	seen.seenSet = make(map[float64]bool)
 	seen.seen = make([]float64, 0, 10000)
+
+	var down DownNeighbors
+	down.down = make([]string, 0, 5)
+
+	n := maelstrom.NewNode()
 
 	n.Handle("broadcast", func(msg maelstrom.Message) error {
 		if neighbors == nil {

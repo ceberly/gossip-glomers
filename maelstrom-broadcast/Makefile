@@ -10,4 +10,8 @@
 .broadcast-b:
 	${MAELSTROM_BIN} test -w broadcast --bin ${OUR_GO_PATH}/bin/maelstrom-broadcast --node-count 5 --time-limit 20 --rate 10
 
-default: .gobuild .broadcast-a .broadcast-b
+.broadcast-c:
+	${MAELSTROM_BIN} test -w broadcast --bin ${OUR_GO_PATH}/bin/maelstrom-broadcast --node-count 5 --time-limit 20 --rate 10 --nemesis partition
+
+#default: .gobuild .broadcast-a .broadcast-b .broadcast-c
+default: .gobuild .broadcast-c
