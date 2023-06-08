@@ -19,9 +19,29 @@ type Seen struct {
 	seen    []float64
 }
 
-type DownNeighbors struct {
-	sync.Mutex
-	down []string
+type GossipQueueItem struct {
+	NodeId  string
+	Message float64
+}
+
+func handleGossipQueue(node *maelstrom.Node, queue chan GossipQueueItem) {
+	neighborMessages := make(map[string]chan float64)
+
+	for r := range queue {
+		// set up a new neighbor message queue
+		q, ok := neighborMessages[r.NodeId]
+		if !ok {
+			neighborMessages[r.NodeId] = make(chan float64)
+			defer close(neighborMessages[r.NodeId])
+			go func(nodeId string) {
+				for m := range neighborMessages[nodeId] {
+					node.Send(nodeId, m)
+				}
+			}(r.NodeId)
+		}
+
+		q <- r.Message
+	}
 }
 
 func main() {
@@ -31,10 +51,13 @@ func main() {
 	seen.seenSet = make(map[float64]bool)
 	seen.seen = make([]float64, 0, 10000)
 
-	var down DownNeighbors
-	down.down = make([]string, 0, 5)
-
 	n := maelstrom.NewNode()
+
+	// maps node id -> slice of messages to retry
+	gossipQueue := make(chan GossipQueueItem, 1)
+
+	defer close(gossipQueue)
+	go handleGossipQueue(n, gossipQueue)
 
 	n.Handle("broadcast", func(msg maelstrom.Message) error {
 		if neighbors == nil {
@@ -55,7 +78,7 @@ func main() {
 			seen.Unlock()
 
 			for _, neighbor := range neighbors {
-				n.Send(neighbor.(string), msg.Body)
+				gossipQueue <- GossipQueueItem{neighbor.(string), message}
 			}
 		} else {
 			seen.Unlock()
