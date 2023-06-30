@@ -19,31 +19,6 @@ type Seen struct {
 	seen    []float64
 }
 
-type GossipQueueItem struct {
-	NodeId  string
-	Message float64
-}
-
-func handleGossipQueue(node *maelstrom.Node, queue chan GossipQueueItem) {
-	neighborMessages := make(map[string]chan float64)
-
-	for r := range queue {
-		// set up a new neighbor message queue
-		q, ok := neighborMessages[r.NodeId]
-		if !ok {
-			neighborMessages[r.NodeId] = make(chan float64)
-			defer close(neighborMessages[r.NodeId])
-			go func(nodeId string) {
-				for m := range neighborMessages[nodeId] {
-					node.Send(nodeId, m)
-				}
-			}(r.NodeId)
-		}
-
-		q <- r.Message
-	}
-}
-
 func main() {
 	var neighbors []interface{}
 
@@ -52,12 +27,6 @@ func main() {
 	seen.seen = make([]float64, 0, 10000)
 
 	n := maelstrom.NewNode()
-
-	// maps node id -> slice of messages to retry
-	gossipQueue := make(chan GossipQueueItem, 1)
-
-	defer close(gossipQueue)
-	go handleGossipQueue(n, gossipQueue)
 
 	n.Handle("broadcast", func(msg maelstrom.Message) error {
 		if neighbors == nil {
@@ -70,16 +39,23 @@ func main() {
 		}
 
 		message := body["message"].(float64)
-
 		seen.Lock()
 		if _, ok := seen.seenSet[message]; !ok {
 			seen.seenSet[message] = true
 			seen.seen = append(seen.seen, message)
+
 			seen.Unlock()
 
+			var wg sync.WaitGroup
 			for _, neighbor := range neighbors {
-				gossipQueue <- GossipQueueItem{neighbor.(string), message}
+				wg.Add(1)
+				go func(node string) {
+					defer wg.Done()
+					n.Send(node, body)
+				}(neighbor.(string))
 			}
+
+			wg.Wait()
 		} else {
 			seen.Unlock()
 		}
